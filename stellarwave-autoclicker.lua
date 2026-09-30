@@ -1,4 +1,4 @@
--- Zodiac Melody auto-clicker (v20)
+-- Zodiac Melody auto-clicker (v20 + new GUI)
 -- Fixes over v19: memory-first size reads, 8px visibility floor,
 -- widened Y guard (container rests below the viewport).
 -- F6 = toggle, right-click = unload.
@@ -79,58 +79,76 @@ local function isSign(v)
 end
 
 -------------- GUI --------------
-local PW, PH = 296, 338
+local PW, TOP, ROW_H, TRKW = 296, 76, 24, 272
 local GUI = { x=20, y=170, dragging=false, dx=0, dy=0, items={} }
 local MOUSE = game:GetService("Players").LocalPlayer:GetMouse()
 
-local COL_BG  = Color3.fromRGB(18,18,24)
-local COL_TXT = Color3.fromRGB(228,231,238)
-local COL_DIM = Color3.fromRGB(134,140,154)
-local COL_ACC = Color3.fromRGB(92,172,255)
-local COL_TRK = Color3.fromRGB(52,54,64)
-local COL_OK  = Color3.fromRGB(110,220,150)
+local COL_BG   = Color3.fromRGB(15,16,22)
+local COL_HDR  = Color3.fromRGB(23,25,35)
+local COL_BRD  = Color3.fromRGB(45,48,64)
+local COL_TXT  = Color3.fromRGB(228,231,238)
+local COL_DIM  = Color3.fromRGB(124,130,148)
+local COL_ACC  = Color3.fromRGB(92,172,255)
+local COL_TRK  = Color3.fromRGB(38,41,54)
+local COL_OK   = Color3.fromRGB(110,220,150)
+local COL_OFF  = Color3.fromRGB(235,90,100)
 
-local function mkSquare(x,y,w,h,c)
+local function mkSquare(w,h,c,z)
   local s = Drawing.new("Square")
-  s.Position=Vector2.new(x,y); s.Size=Vector2.new(w,h)
+  s.Position=Vector2.new(0,0); s.Size=Vector2.new(w,h)
   s.Color=c; s.Filled=true; s.Visible=true
+  pcall(function() s.ZIndex = z or 1 end)
   return s
 end
-local function mkText(x,y,sz,c,cen)
+local function mkText(sz,c,cen,z)
   local s = Drawing.new("Text")
-  s.Position=Vector2.new(x,y); s.Size=sz; s.Color=c
-  s.Center=cen or false; s.Outline=false; s.Visible=true
+  s.Size=sz; s.Color=c; s.Center=cen or false
+  s.Outline=false; s.Visible=true
+  pcall(function() s.Font = Drawing.Fonts.Monospace end)
+  pcall(function() s.ZIndex = z or 3 end)
   return s
 end
-
-local gPanel = mkSquare(0,0,PW,PH,COL_BG)
-local gTitle = mkText(0,0,14,COL_TXT)
-local gHint  = mkText(0,0,11,COL_DIM)
-local gStat  = mkText(0,0,12,COL_OK)
-gTitle.Text = "Zodiac Melody  [F6]"
-gHint.Text  = "drag title | right-click = close"
+local function mkCircle(r,c,z)
+  local s = Drawing.new("Circle")
+  s.Radius=r; s.Color=c; s.Filled=true; s.NumSides=24; s.Visible=true
+  pcall(function() s.ZIndex = z or 4 end)
+  return s
+end
 
 local SPEC = {
-  {"Move settle",  "MOVE_SETTLE",  0.01, 0.15, 0.005, "%.3f"},
-  {"Jitter dwell", "JITTER",       0.010,0.10, 0.002, "%.3f"},
-  {"Jitter steps", "JITTER_STEPS", 1,    10,   1,     "%d"},
-  {"Jitter radius","JITTER_R",     1,    12,   1,     "%d"},
-  {"Hold",         "HOLD",         0.01, 0.20, 0.005, "%.3f"},
-  {"Gap",          "GAP",          0.00, 0.30, 0.005, "%.3f"},
-  {"Grow gate",    "GROW_FRAC",    0.05, 0.90, 0.05,  "%.0f%%"},
-  {"Min size px",  "MIN_PX",       4,    60,   1,     "%d"},
-  {"Cast budget",  "CAST_BUDGET",  3.0, 12.0, 0.5,   "%.3f"},
-  {"Max repress",  "MAX_REPRESS",  1,    8,    1,     "%d"},
+  {"Move settle",   "MOVE_SETTLE",  0.01, 0.15, 0.005, "%.3fs"},
+  {"Jitter dwell",  "JITTER",       0.010,0.10, 0.002, "%.3fs"},
+  {"Jitter steps",  "JITTER_STEPS", 1,    10,   1,     "%d"},
+  {"Jitter radius", "JITTER_R",     1,    12,   1,     "%dpx"},
+  {"Hold",          "HOLD",         0.01, 0.20, 0.005, "%.3fs"},
+  {"Gap",           "GAP",          0.00, 0.30, 0.005, "%.3fs"},
+  {"Grow gate",     "GROW_FRAC",    0.05, 0.90, 0.05,  "%.0f%%", 100},
+  {"Min size",      "MIN_PX",       4,    60,   1,     "%dpx"},
+  {"Cast budget",   "CAST_BUDGET",  3.0, 12.0, 0.5,    "%.1fs"},
+  {"Max repress",   "MAX_REPRESS",  1,    8,    1,     "%d"},
 }
+local PH = TOP + #SPEC*ROW_H + 26
 
-local TRKW, ROW_H, TOP = 236, 21, 68
+local gBorder = mkSquare(PW,PH,COL_BRD,1); gBorder.Filled=false; gBorder.Thickness=1
+local gPanel  = mkSquare(PW,PH,COL_BG,1)
+local gHdr    = mkSquare(PW,30,COL_HDR,2)
+local gAccent = mkSquare(PW,2,COL_ACC,3)
+local gTitle  = mkText(14,COL_TXT)
+local gDot    = mkCircle(5,COL_OK)
+local gStat   = mkText(12,COL_OK)
+local gInfo   = mkText(11,COL_DIM)
+local gHint   = mkText(10,COL_DIM)
+gTitle.Text = "Zodiac Melody  [F6]"
+gHint.Text  = "drag header | right-click = close"
+
 for i, sp in ipairs(SPEC) do
   GUI.items[i] = {
-    key=sp[2], min=sp[3], max=sp[4], step=sp[5], fmt=sp[6],
-    lab = mkText(0,0,12,COL_TXT),
-    val = mkText(0,0,12,COL_ACC,true),
-    trk = mkSquare(0,0,TRKW,4,COL_TRK),
-    knb = mkSquare(0,0,4,7,COL_ACC),
+    key=sp[2], min=sp[3], max=sp[4], step=sp[5], fmt=sp[6], mult=sp[7] or 1,
+    lab  = mkText(12,COL_TXT),
+    val  = mkText(12,COL_ACC,true),
+    trk  = mkSquare(TRKW,4,COL_TRK,2),
+    fill = mkSquare(2,4,COL_ACC,3),
+    knb  = mkCircle(5,COL_TXT),
     dragging=false,
   }
   GUI.items[i].lab.Text = sp[1]
@@ -138,18 +156,23 @@ end
 
 local function place()
   local x, y = GUI.x, GUI.y
-  gPanel.Position = Vector2.new(x,y)
-  gTitle.Position = Vector2.new(x+12, y+7)
-  gHint.Position  = Vector2.new(x+12, y+27)
-  gStat.Position  = Vector2.new(x+12, y+47)
+  gBorder.Position = Vector2.new(x,y)
+  gPanel.Position  = Vector2.new(x,y)
+  gHdr.Position    = Vector2.new(x,y)
+  gAccent.Position = Vector2.new(x,y+30)
+  gTitle.Position  = Vector2.new(x+12, y+8)
+  gDot.Position    = Vector2.new(x+PW-16, y+15)
+  gStat.Position   = Vector2.new(x+12, y+38)
+  gInfo.Position   = Vector2.new(x+12, y+55)
+  gHint.Position   = Vector2.new(x+12, y+PH-18)
   for i = 1, #GUI.items do
     local it = GUI.items[i]
     local cy = y + TOP + (i-1)*ROW_H
-    it.lab.Position = Vector2.new(x+12, cy)
-    it.val.Position = Vector2.new(x+284, cy)
-    it.trk.Position = Vector2.new(x+12, cy+15)
-    it.knb.Position = Vector2.new(x+12, cy+14)
-    it.trkX = x+12
+    it.cy, it.trkX = cy, x+12
+    it.lab.Position  = Vector2.new(x+12, cy)
+    it.val.Position  = Vector2.new(x+PW-40, cy)
+    it.trk.Position  = Vector2.new(x+12, cy+17)
+    it.fill.Position = Vector2.new(x+12, cy+17)
   end
 end
 place()
@@ -159,10 +182,11 @@ function S.Stop()
   if S.conn then pcall(function() S.conn:Disconnect() end) end
   if S.guiConn then pcall(function() S.guiConn:Disconnect() end) end
   if S.rmConn then pcall(function() S.rmConn:Disconnect() end) end
-  local all = { gPanel, gTitle, gHint, gStat }
+  local all = { gBorder, gPanel, gHdr, gAccent, gTitle, gDot, gStat, gInfo, gHint }
   for i = 1, #GUI.items do
     local it = GUI.items[i]
-    all[#all+1]=it.lab; all[#all+1]=it.val; all[#all+1]=it.trk; all[#all+1]=it.knb
+    all[#all+1]=it.lab; all[#all+1]=it.val; all[#all+1]=it.trk
+    all[#all+1]=it.fill; all[#all+1]=it.knb
   end
   for i = 1, #all do pcall(function() all[i]:Remove() end) end
 end
@@ -391,9 +415,7 @@ S.guiConn = game:GetService("RunService").RenderStepped:Connect(function()
       GUI.dx, GUI.dy = mx - x, my - y
     else
       local idx = math.floor((my - (y + TOP)) / ROW_H) + 1
-      if idx >= 1 and idx <= #GUI.items
-         and mx >= x+8 and mx <= x+8+TRKW
-         and my >= y+TOP+(idx-1)*ROW_H and my <= y+TOP+(idx-1)*ROW_H+ROW_H then
+      if idx >= 1 and idx <= #GUI.items and mx >= x+6 and mx <= x+PW-6 then
         GUI.items[idx].dragging = true
       end
     end
@@ -416,18 +438,21 @@ S.guiConn = game:GetService("RunService").RenderStepped:Connect(function()
       CFG[it.key] = math.max(it.min, math.min(it.max, snap))
     end
     local t = math.max(0, math.min(1, (CFG[it.key] - it.min) / (it.max - it.min)))
-    it.knb.Size = Vector2.new(math.max(3, t*TRKW), 7)
-    it.val.Text = string.format(it.fmt, CFG[it.key])
+    it.fill.Size = Vector2.new(math.max(2, t*TRKW), 4)
+    it.knb.Position = Vector2.new(it.trkX + t*TRKW, it.cy + 19)
+    it.knb.Radius = it.dragging and 7 or 5
+    it.knb.Color = it.dragging and COL_ACC or COL_TXT
+    it.val.Text = string.format(it.fmt, CFG[it.key] * it.mult)
   end
 
-  gStat.Text = S.status .. "  |  " .. S.clicks .. " clicks  rr" .. S.rerolls
-             .. "  |  m" .. S.memOK .. "/" .. S.reads
-             .. "  |  " .. (S.enabled and "ON" or "OFF")
+  gStat.Text = S.status
+  gInfo.Text = S.clicks .. " clicks | rr" .. S.rerolls .. " | mem " .. S.memOK .. "/" .. S.reads
   gStat.Color = S.enabled and COL_OK or COL_DIM
+  gDot.Color  = S.enabled and COL_OK or COL_OFF
 end)
 
 S.rmConn = game:GetService("UserInputService").InputBegan:Connect(function(k)
   if k and k.KeyCode == 2 then S.Stop() end
 end)
 
-print("ZW v20 loaded (memory-first sizes, 8px floor, widened Y guard)")
+print("ZW v20 loaded (memory-first sizes, 8px floor, widened Y guard, new GUI)")
